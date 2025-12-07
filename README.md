@@ -31,7 +31,6 @@
 15. [Common Exam Questions](#-common-exam-questions)
 16. [Exam Strategy & Tips](#-exam-strategy--tips)
 17. [Practice Labs & Resources](#-practice-labs--resources)
-18. [Pre-Exam Checklist](#-pre-exam-checklist)
 
 </details>
 
